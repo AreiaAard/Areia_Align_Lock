@@ -1,0 +1,383 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE muclient>
+
+<muclient>
+<plugin
+    name="Areia_Align_Lock"
+    author="Areia"
+    id="f85215bdebf32c7d0d21ebaf"
+    language="Lua"
+    purpose="Automatically lock align"
+    save_state="n"
+    date_written="2022-07-09 18:34:37"
+    requires="5.06"
+    version="0.00"
+   >
+<description trim="y">
+<![CDATA[
+]]>
+</description>
+
+</plugin>
+
+<include name="constants.lua"/>
+
+
+
+<aliases>
+</aliases>
+
+<script>
+<![CDATA[
+require "commas"
+require "copytable"
+require "json"
+require "gmcphelper"
+require "tprint"
+require "var"
+require "wait"
+dofile(GetInfo(60) .. "aardwolf_colors.lua")
+
+
+
+--------------------------------------------------
+-- Config
+--------------------------------------------------
+
+Config = {}
+
+
+function Config.initialize()
+    Config.load()
+end
+
+
+function Config.default()
+    local data = {
+    }
+    return json.encode(data)
+end
+
+
+function Config.load()
+    Config.data = json.decode(var.config or Config.default())
+end
+
+
+function Config.save()
+    var.config = json.encode(Config.data)
+end
+
+
+function Config.get(key)
+    return Config.data[key]
+end
+
+
+function Config.set(key, val)
+    Config.data[key] = val
+    Config.save()
+end
+]]>
+</script>
+
+
+
+<aliases>
+    <alias
+     match="^ *aal +update *$"
+     enabled="y"
+     script="Remote.update_plugin"
+     regexp="y"
+     ignore_case="y"
+     sequence="100"
+    >
+    </alias>
+</aliases>
+
+<script>
+<![CDATA[
+--------------------------------------------------
+-- Remote
+--------------------------------------------------
+
+local https = require "ssl.https"
+
+Remote = {}
+
+
+function Remote.update_plugin(alias, line, wc)
+    local url = "https://raw.githubusercontent.com/AreiaAard/Areia_Align_Lock/main/areia_align_lock.xml"
+    local xml = https.request(url)
+    if (not xml) then
+        Utility.msg_prim("Failed to download remote plugin file.")
+        return false
+    end
+
+    local pluginID = GetPluginID()
+    local localVersion = GetPluginInfo(pluginID, 19) or 0
+    local localVersionStr = string.format("%1.2f", localVersion)
+    local remoteVersionStr = xml:match('%s%s+version="([0-9%.]+)"')
+    local remoteVersion = tonumber(remoteVersionStr or "") or 0
+
+    if (localVersion == remoteVersion) then
+        Utility.msg_prim("Version is up to date.")
+        return true
+    end
+
+    Utility.msg_prim(string.format(
+        "Updating from v%s to v%s...",
+        localVersionStr, remoteVersionStr
+    ))
+    Utility.msg_sec("Please do not touch anything.")
+    local fileName = GetPluginInfo(pluginID, 6)
+    local file = assert(io.open(fileName, "w"))
+    file:write(xml)
+    file:close()
+    Utility.reload_plugin()
+    return true
+end
+]]>
+</script>
+
+
+
+<aliases>
+    <alias
+        match="^ *aal +help *$"
+        enabled="y"
+        script="Help.main"
+        regexp="y"
+        ignore_case="y"
+        sequence="100"
+    >
+    </alias>
+    <alias
+        match="^ *aal +help +(?<topic>\w+) *$"
+        enabled="y"
+        script="Help.main"
+        regexp="y"
+        ignore_case="y"
+        sequence="100"
+    >
+    </alias>
+</aliases>
+
+<script>
+<![CDATA[
+--------------------------------------------------
+-- Help
+--------------------------------------------------
+
+Help = {}
+
+
+function Help.initialize()
+    Help.topics = {
+        {
+            name = "config",
+            desc = "Plugin configuration options",
+            func = Help.config,
+        },
+        {
+            name = "misc",
+            desc = "Other plugin commands",
+            func = Help.misc,
+        },
+    }
+end
+
+
+function Help.display_helpfile(title, body)
+    local fullTitle = string.format("@WAlign Lock Help - %s", title)
+    Utility.print(Utility.center(fullTitle, 80))
+    Utility.print(string.rep("=", 80))
+    Utility.print(body)
+end
+
+
+function Help.main(alias, line, wc)
+    local topicName = wc.topic
+    if (not topicName) then
+        Help.list_topics()
+        return
+    end
+
+    topicName = topicName:lower()
+    for _, topic in ipairs(Help.topics) do
+        if (Utility.starts_with(topic.name, topicName)) then
+            topic.func()
+            return
+        end
+    end
+
+    Utility.msg_prim(string.format(
+        "%s is not a valid help topic.",
+        Utility.pascal_case(topicName)
+    ))
+    Help.list_topics()
+end
+
+
+function Help.list_topics()
+    Utility.print(Utility.center("Align Lock Help - Topics", 80))
+    Utility.print(string.rep("=", 80))
+
+    for _, topic in ipairs(Help.topics) do
+        local cmd = string.format("aal help %-10.10s", topic.name)
+        Hyperlink(trim(cmd), cmd, "", "yellow", "black", false, true)
+        ColourNote("silver", "black", ": ", "", "", topic.desc)
+        Note()
+    end
+
+    Utility.print("Click on or type one of the above to view help.")
+end
+
+
+function Help.config()
+    local body = [===[
+]===]
+    Help.display_helpfile("Config", body)
+end
+
+
+function Help.misc()
+    local body = [===[
+@Yaal update    @w: Checks for an updated version of the plugin and installs it
+                if found.
+]===]
+    Help.display_helpfile("Misc", body)
+end
+]]>
+</script>
+
+
+
+<script>
+<![CDATA[
+--------------------------------------------------
+-- Utility
+--------------------------------------------------
+
+Utility = {}
+
+
+function Utility.initialize()
+    local modules = {
+        Config,
+        Help,
+    }
+    for _, module in ipairs(modules) do
+        if (module.initialize) then
+            module.initialize()
+        end
+    end
+end
+
+
+function Utility.deinitialize()
+end
+
+
+function Utility.print(str)
+    -- Lets us use Aard color codes in our ColourNotes
+    AnsiNote(stylesToANSI(ColoursToStyles(string.format("@w%s@w", str))))
+end
+
+
+function Utility.msg_prim(str, ...)
+    Utility.print(string.format("[@YAlign Lock@w]: %s", str))
+    for _, msg in ipairs{...} do
+        Utility.msg_sec(msg)
+    end
+end
+
+
+function Utility.msg_sec(str)
+    Utility.print(string.format("              %s", str))
+end
+
+
+function Utility.pascal_case(str)
+    str = str:gsub("(%a)([%w_']*)",
+        function(first,remainder)
+            return string.format("%s%s", first:upper(), remainder:lower())
+        end
+    )
+    return str
+end
+
+
+function Utility.starts_with(s, t)
+    if not (type(s) == "string" and type(t) == "string") then
+        return false
+    end
+    return s:sub(1, #t) == t
+end
+
+
+function Utility.ends_with(s, t)
+    return Utility.starts_with(s:reverse(), t:reverse())
+end
+
+
+function Utility.center(str, lineLength, fill)
+    local centerLength = #strip_colours(str)
+    if (centerLength >= lineLength) then
+        return str
+    end
+    local leftLength = math.floor((lineLength - centerLength) / 2)
+    local rightLength = lineLength - centerLength - leftLength
+    fill = fill or " "
+    local centered = "%s%s%s"
+    return centered:format(fill:rep(leftLength), str, fill:rep(rightLength))
+end
+
+
+function Utility.reload_plugin()
+    if (GetAlphaOption("script_prefix") == "") then
+        SetAlphaOption("script_prefix", "\\\\\\")
+    end
+    local scriptPrefix = GetAlphaOption("script_prefix")
+    local pluginID = GetPluginID()
+    local cmd = "%sDoAfterSpecial(1, \"ReloadPlugin('%s')\", sendto.script)"
+    Utility.msg_prim("Reloading...")
+    Execute(cmd:format(scriptPrefix, pluginID))
+end
+]]>
+</script>
+
+
+
+<script>
+<![CDATA[
+--------------------------------------------------
+-- Plugin Callbacks
+--------------------------------------------------
+
+function OnPluginInstall()
+    Utility.initialize()
+Utility.msg_prim("Plugin installed. Submit @Yaal help @wfor help.")
+end
+
+function OnPluginEnable()
+    OnPluginInstall()
+end
+
+function OnPluginClose()
+    Utility.deinitialize()
+end
+
+function OnPluginDisable()
+    OnPluginClose()
+end
+
+function OnPluginBroadcast(msg, id, name, text)
+    if (id == "3e7dedbe37e44942dd46d264") then
+    end
+end
+]]>
+</script>
+
+
+</muclient>

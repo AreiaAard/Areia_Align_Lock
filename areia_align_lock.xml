@@ -30,6 +30,15 @@
 
 
 <aliases>
+    <alias
+     match="^aal +config +auto *(?<setting>.*)$"
+     enabled="y"
+     script="Config.set_auto"
+     regexp="y"
+     ignore_case="y"
+     sequence="100"
+    >
+    </alias>
 </aliases>
 
 <script>
@@ -83,6 +92,29 @@ end
 function Config.set(key, val)
     Config.data[key] = val
     Config.save()
+end
+
+
+function Config.set_auto(alias, line, wc)
+    local input = trim(wc.setting):lower()
+    if (input == "") then
+        -- Toggle.
+        input = Config.get("auto") and "off" or "on"
+    end
+
+    local setting
+    if (input == "on") then
+        setting = true
+    elseif (input == "off") then
+        setting = false
+    else
+        Utility.msg_prim("Syntax: @Yaal config auto [on|off]")
+        return
+    end
+
+    Config.set("auto", setting)
+    local msg = "Automatic locking turned %s."
+    Utility.msg_prim(msg:format(input))
 end
 ]]>
 </script>
@@ -370,6 +402,10 @@ end
 
 function Help.config()
     local body = [===[
+These commands control the plugin's general behavior. To activate these com-
+mands, prefix each with 'aal config' (e.g., @Yaal config auto@w).
+@Yauto [on|off]@w: Set/toggle whether the plugin automatically tries to lock your
+    alignment when your cskill drops or fails to cast.
 ]===]
     Help.display_helpfile("Config", body)
 end

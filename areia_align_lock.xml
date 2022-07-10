@@ -39,6 +39,16 @@
      sequence="100"
     >
     </alias>
+
+    <alias
+     match="^aal +config +align *(?<setting>.*)$"
+     enabled="y"
+     script="Config.set_align"
+     regexp="y"
+     ignore_case="y"
+     sequence="100"
+    >
+    </alias>
 </aliases>
 
 <script>
@@ -69,6 +79,7 @@ end
 function Config.default()
     local data = {
         auto = true,
+        align = "neutral",
     }
     return json.encode(data)
 end
@@ -114,6 +125,34 @@ function Config.set_auto(alias, line, wc)
 
     Config.set("auto", setting)
     local msg = "Automatic locking turned %s."
+    Utility.msg_prim(msg:format(input))
+end
+
+
+function Config.set_align(alias, line, wc)
+    local input = trim(wc.setting):lower()
+    if (input == "") then
+        -- Cycle.
+        local current = Config.get("align")
+        input = current == "good" and "neutral"
+            or current == "neutral" and "evil" or "good"
+    end
+
+    -- Allow shorthand inputs like 'g' or 'e'. Convert any valid
+    -- input to the canonical form.
+    if (Utility.starts_with("good", input)) then
+        input = "good"
+    elseif (Utility.starts_with("neutral", input)) then
+        input = "neutral"
+    elseif (Utility.starts_with("evil", input)) then
+        input = "evil"
+    else
+        Utility.msg_prim("Syntax: @Yaal config align [good|neutral|evil]")
+        return
+    end
+
+    Config.set("align", input)
+    local msg = "Auto-locking limited to %s alignment."
     Utility.msg_prim(msg:format(input))
 end
 ]]>
@@ -211,7 +250,8 @@ end
 
 function Lock.try_cr()
     wait.time(0.2)
-    if (GMCP.charState == 3) then
+    if (GMCP.charState == 3
+    and Config.get("align") == GMCP.align_as_string()) then
         Lock.cskill_send()
     end
 end
@@ -243,6 +283,15 @@ function GMCP.state_change(new)
         Lock.try()
     end
     GMCP.charState = new
+end
+
+
+function GMCP.align_as_string(align)
+    align = tonumber(align or gmcp("char.status.align"))
+    if (align > -875 and align < 875) then
+        return "neutral"
+    end
+    return align > 0 and "good" or "evil"
 end
 ]]>
 </script>
@@ -406,6 +455,9 @@ These commands control the plugin's general behavior. To activate these com-
 mands, prefix each with 'aal config' (e.g., @Yaal config auto@w).
 @Yauto [on|off]@w: Set/toggle whether the plugin automatically tries to lock your
     alignment when your cskill drops or fails to cast.
+@Yalign [good|neutral|evil]@w: Set/cycle through the alignment into which you want
+    to be locked. If this does not match your current align, the plugin will
+    not auto-lock.
 ]===]
     Help.display_helpfile("Config", body)
 end

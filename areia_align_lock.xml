@@ -1,10 +1,5 @@
 <?xml version="1.0" encoding="iso-8859-1"?>
-<!DOCTYPE muclient [
-    <!ENTITY cskillcmd "apathy">
-    <!ENTITY cskillon "Sorrow infuses your soul with apathy.">
-    <!ENTITY cskilloff "Sorrow relinquishes your soul.">
-    <!ENTITY cskillfail "Sorrow takes your measure and finds you lacking.">
-]>
+<!DOCTYPE muclient>
 
 <muclient>
 <plugin
@@ -49,6 +44,43 @@
      sequence="100"
     >
     </alias>
+
+    <alias
+     match="^aal +config +cskillon *(?<setting>.*)$"
+     enabled="y"
+     script="Config.set_cskillon"
+     regexp="y"
+     ignore_case="y"
+     sequence="100"
+    >
+    </alias>
+    <alias
+     match="^aal +config +cskilloff *(?<setting>.*)$"
+     enabled="y"
+     script="Config.set_cskilloff"
+     regexp="y"
+     ignore_case="y"
+     sequence="100"
+    >
+    </alias>
+    <alias
+     match="^aal +config +cskillfail *(?<setting>.*)$"
+     enabled="y"
+     script="Config.set_cskillfail"
+     regexp="y"
+     ignore_case="y"
+     sequence="100"
+    >
+    </alias>
+    <alias
+     match="^aal +config +cskillcmd *(?<setting>.*)$"
+     enabled="y"
+     script="Config.set_cskillcmd"
+     regexp="y"
+     ignore_case="y"
+     sequence="100"
+    >
+    </alias>
 </aliases>
 
 <script>
@@ -80,6 +112,10 @@ function Config.default()
     local data = {
         auto = true,
         align = "neutral",
+        cskillon = "Sorrow infuses your soul with apathy.",
+        cskilloff = "Sorrow relinquishes your soul.",
+        cskillfail = "Sorrow takes your measure and finds you lacking.",
+        cskillcmd = "apathy",
     }
     return json.encode(data)
 end
@@ -155,6 +191,49 @@ function Config.set_align(alias, line, wc)
     local msg = "Auto-locking limited to %s alignment."
     Utility.msg_prim(msg:format(input))
 end
+
+
+function Config.set_cskillon(alias, line, wc)
+    local text = trim(wc.setting)
+    if (text ~= "") then
+        Config.set("cskillon", text)
+        Lock.add_triggers()
+    end
+    Utility.msg_prim("Clanskill success message set to the following:")
+    Utility.msg_sec(Config.get("cskillon"))
+end
+
+
+function Config.set_cskilloff(alias, line, wc)
+    local text = trim(wc.setting)
+    if (text ~= "") then
+        Config.set("cskilloff", text)
+        Lock.add_triggers()
+    end
+    Utility.msg_prim("Clanskill expiration message set to the following:")
+    Utility.msg_sec(Config.get("cskilloff"))
+end
+
+
+function Config.set_cskillfail(alias, line, wc)
+    local text = trim(wc.setting)
+    if (text ~= "") then
+        Config.set("cskillfail", text)
+        Lock.add_triggers()
+    end
+    Utility.msg_prim("Clanskill failure message set to the following:")
+    Utility.msg_sec(Config.get("cskillfail"))
+end
+
+
+function Config.set_cskillcmd(alias, line, wc)
+    local text = trim(wc.setting)
+    if (text ~= "") then
+        Config.set("cskillcmd", text)
+    end
+    Utility.msg_prim("Clanskill command set to the following:")
+    Utility.msg_sec(Config.get("cskillcmd"))
+end
 ]]>
 </script>
 
@@ -169,43 +248,11 @@ end
      ignore_case="y"
      sequence="100"
     ><send>
-    local m = {
-        on = "Sorrow infuses your soul with apathy.",
-        off = "Sorrow relinquishes your soul.",
-        fail = "Sorrow takes your measure and finds you lacking.",
-    }
-    SendNoEcho("Echo " .. m[string.lower("%1")])
+    local config = "cskill" .. ("%1"):lower()
+    SendNoEcho("echo " .. Config.get(config))
     </send>
     </alias>
 </aliases>
-
-
-<triggers>
-    <trigger
-     name="trigger_cskill_on"
-     match="&cskillon;"
-     enabled="y"
-     script="Lock.cskill_on"
-     sequence="100"
-    >
-    </trigger>
-    <trigger
-     name="trigger_cskill_off"
-     match="&cskilloff;"
-     enabled="y"
-     script="Lock.cskill_off"
-     sequence="100"
-    >
-    </trigger>
-    <trigger
-     name="trigger_cskill_fail"
-     match="&cskillfail;"
-     enabled="y"
-     script="Lock.cskill_fail"
-     sequence="100"
-    >
-    </trigger>
-</triggers>
 
 <script>
 <![CDATA[
@@ -215,29 +262,53 @@ end
 
 Lock = {}
 Lock.locked = false
-]]>
-Lock.CMD = "&cskillcmd;"
 
 
-<![CDATA[
-function Lock.cskill_on(trigger, line, wc)
+function Lock.initialize()
+    Lock.add_triggers()
+end
+
+
+function Lock.add_triggers()
+    local triggerFlags = trigger_flag.Enabled + trigger_flag.Replace
+        + trigger_flag.Temporary
+    for _, config in ipairs{"cskillon", "cskilloff", "cskillfail"} do
+        local triggerName = "trigger_" .. config
+        local code = AddTrigger(
+            triggerName, Config.get(config), "",
+            triggerFlags, custom_colour.NoChange,
+            0, "", "Lock.on_" .. config
+        )
+        if (code ~= error_code.eOK) then
+            Utility.msg_prim(
+                ("Failed to add trigger %s:"):format(triggerName)
+            )
+            Utility.msg_sec(
+                ("%d - %s"):format(code, error_desc[code])
+            )
+        end
+    end
+end
+
+
+function Lock.on_cskillon(trigger, line, wc)
     Lock.locked = true
 end
 
 
-function Lock.cskill_off(trigger, line, wc)
+function Lock.on_cskilloff(trigger, line, wc)
     Lock.locked = false
     Lock.try()
 end
 
 
-function Lock.cskill_fail(trigger, line, wc)
+function Lock.on_cskillfail(trigger, line, wc)
     Lock.try()
 end
 
 
 function Lock.cskill_send()
-    SendNoEcho(Lock.CMD)
+    SendNoEcho(Config.get("cskillcmd"))
 end
 
 
@@ -458,6 +529,10 @@ mands, prefix each with 'aal config' (e.g., @Yaal config auto@w).
 @Yalign [good|neutral|evil]@w: Set/cycle through the alignment into which you want
     to be locked. If this does not match your current align, the plugin will
     not auto-lock.
+@Ycskillon [<message>]@w: Set the message seen when your cskill casts successfully.
+@Ycskilloff [<message>]@w: Set the message seen when your cskill expires.
+@Ycskillfail [<message>]@w: Set the message seen when your cskill fails.
+@Ycskillcmd [<cmd>]@w: Set the command used to cast your cskill.
 ]===]
     Help.display_helpfile("Config", body)
 end
@@ -488,6 +563,7 @@ function Utility.initialize()
     local modules = {
         Config,
         Help,
+        Lock,
     }
     for _, module in ipairs(modules) do
         if (module.initialize) then

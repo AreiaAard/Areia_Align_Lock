@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="iso-8859-1"?>
-<!DOCTYPE muclient>
+<!DOCTYPE muclient [
+    <!ENTITY cskillcmd "apathy">
+    <!ENTITY cskillon "Sorrow infuses your soul with apathy.">
+    <!ENTITY cskilloff "Sorrow relinquishes your soul.">
+    <!ENTITY cskillfail "Sorrow takes your measure and finds you lacking.">
+]>
 
 <muclient>
 <plugin
@@ -54,6 +59,7 @@ end
 
 function Config.default()
     local data = {
+        auto = true,
     }
     return json.encode(data)
 end
@@ -77,6 +83,134 @@ end
 function Config.set(key, val)
     Config.data[key] = val
     Config.save()
+end
+]]>
+</script>
+
+
+
+<aliases>
+    <alias
+     match="^aal +test +(on|off|fail)$"
+     enabled="y"
+     send_to="12"
+     regexp="y"
+     ignore_case="y"
+     sequence="100"
+    ><send>
+    local m = {
+        on = "Sorrow infuses your soul with apathy.",
+        off = "Sorrow relinquishes your soul.",
+        fail = "Sorrow takes your measure and finds you lacking.",
+    }
+    SendNoEcho("Echo " .. m[string.lower("%1")])
+    </send>
+    </alias>
+</aliases>
+
+
+<triggers>
+    <trigger
+     name="trigger_cskill_on"
+     match="&cskillon;"
+     enabled="y"
+     script="Lock.cskill_on"
+     sequence="100"
+    >
+    </trigger>
+    <trigger
+     name="trigger_cskill_off"
+     match="&cskilloff;"
+     enabled="y"
+     script="Lock.cskill_off"
+     sequence="100"
+    >
+    </trigger>
+    <trigger
+     name="trigger_cskill_fail"
+     match="&cskillfail;"
+     enabled="y"
+     script="Lock.cskill_fail"
+     sequence="100"
+    >
+    </trigger>
+</triggers>
+
+<script>
+<![CDATA[
+--------------------------------------------------
+-- Lock
+--------------------------------------------------
+
+Lock = {}
+Lock.locked = false
+]]>
+Lock.CMD = "&cskillcmd;"
+
+
+<![CDATA[
+function Lock.cskill_on(trigger, line, wc)
+    Lock.locked = true
+end
+
+
+function Lock.cskill_off(trigger, line, wc)
+    Lock.locked = false
+    Lock.try()
+end
+
+
+function Lock.cskill_fail(trigger, line, wc)
+    Lock.try()
+end
+
+
+function Lock.cskill_send()
+    SendNoEcho(Lock.CMD)
+end
+
+
+function Lock.try()
+    if (Config.get("auto")) then
+        wait.make(Lock.try_cr)
+    end
+end
+
+
+function Lock.try_cr()
+    wait.time(0.2)
+    if (GMCP.charState == 3) then
+        Lock.cskill_send()
+    end
+end
+]]>
+</script>
+
+
+
+<script>
+<![CDATA[
+--------------------------------------------------
+-- GMCP
+--------------------------------------------------
+
+GMCP = {}
+GMCP.HANDLER_ID = "3e7dedbe37e44942dd46d264"
+
+
+function GMCP.state_check()
+    local state = tonumber(gmcp("char.status.state"))
+    if (state ~= GMCP.charState) then
+        GMCP.state_change(state)
+    end
+end
+
+
+function GMCP.state_change(new)
+    if (not Lock.locked) then
+        Lock.try()
+    end
+    GMCP.charState = new
 end
 ]]>
 </script>
@@ -373,7 +507,8 @@ function OnPluginDisable()
 end
 
 function OnPluginBroadcast(msg, id, name, text)
-    if (id == "3e7dedbe37e44942dd46d264") then
+    if (id == GMCP.HANDLER_ID and text == "char.status") then
+        GMCP.state_check()
     end
 end
 ]]>
